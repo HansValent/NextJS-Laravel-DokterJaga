@@ -1,0 +1,288 @@
+/* =============================================================
+   adminResponsive.css
+   HANYA mengatur tampilan mobile (≤768px)
+   Tidak menyentuh class desktop. Semua class baru pakai prefix "dj-mob-"
+   ============================================================= */
+
+/* ── Sembunyikan sidebar di mobile ──────────────────────────── */
+@media (max-width: 768px) {
+  /* Sembunyikan sidebar asli */
+  .sidebar {
+    display: none !important;
+  }
+
+  /* Atur ulang layout utama agar full width */
+  .flex.h-screen.w-full {
+    display: block !important;
+  }
+
+  .flex-1.flex.flex-col.min-w-0 {
+    width: 100% !important;
+  }
+
+  .overflow-x-auto,
+  .table-responsive,
+  .admin-table-wrapper {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch; /* Membuat scroll terasa smooth di iOS/Safari */
+  }
+
+  .overflow-x-auto table,
+  .table-responsive table,
+  .admin-table-wrapper table {
+    width: max-content !important; 
+    min-width: 100%;
+  }
+
+  .overflow-x-auto th,
+  .overflow-x-auto td,
+  .table-responsive th,
+  .table-responsive td {
+    white-space: nowrap;
+  }
+
+  .flex.flex-wrap.gap-4, 
+  .flex.items-center.gap-2 {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    width: 100% !important;
+  }
+
+  /* Buat input pencarian dan select box memenuhi lebar layar mobile */
+  .table-responsive + div,
+  input[type="text"], 
+  input[type="date"],
+  select {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  /* Beri ruang bawah agar konten tidak tertutup bottom nav */
+  .main-content {
+    padding-bottom: 90px !important;
+    padding-top: 80px !important; 
+    margin-left: 0 !important;
+    overflow-x: hidden;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  /* Header bawaan disesuaikan */
+  .main-header {
+    left: 0 !important;
+    height: auto !important;
+    min-height: 75px !important;
+    padding: 8px 10px !important;
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    gap: 6px !important;
+  }
+
+.dj-mobile h1 {
+    font-size: 11px !important;
+    font-weight: 800 !important;
+    margin: 0 !important;
+    line-height: 1.2 !important;
+  }
+  .dj-mobile p {
+    font-size: 9px !important;
+    margin: 0 !important;
+    line-height: 1.2 !important;
+  }
+
+  /* 3. Merapikan Teks DOKTER JAGA & Jam (Tengah) */
+  .main-header h2.text-2xl {
+    font-size: 12px !important; /* Perkecil dari text-2xl */
+    font-weight: 800 !important;
+    margin: 0 !important;
+    line-height: 1.1 !important;
+  }
+  .main-header div[style*="text-align: center"] {
+    font-size: 9px !important; /* Perkecil ukuran tanggal & jam */
+    line-height: 1.2 !important;
+  }
+
+  .user-info,
+  .user-dropdown {
+    display: none !important;
+  }
+
+  .dj-total-info {
+    display: block !important;
+    width: 100% !important;
+    margin-left: 12px !important;
+    text-align: left !important;
+    clear: both !important;
+  }
+
+  /* Sembunyikan hover zone karena tidak berguna di mobile */
+  .header-hover-zone {
+    display: none !important;
+  }
+}
+
+/* =============================================================
+   MOBILE BOTTOM NAVIGATION
+   ============================================================= */
+.dj-mob-nav {
+  display: none; /* default hidden */
+}
+
+@media (max-width: 768px) {
+  .dj-mob-nav {
+    display: flex;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 68px;
+    background: linear-gradient(90deg, #089232 0%, #11b63f 100%);
+    align-items: center;
+    justify-content: space-around;
+    padding: 0 8px 8px;
+    z-index: 9990;
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.15);
+    border-radius: 20px 20px 0 0;
+  }
+
+  .dj-mob-nav-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    color: rgba(255, 255, 255, 0.65);
+    text-decoration: none;
+    font-size: 0.68rem;
+    font-weight: 500;
+    padding: 6px 4px;
+    border-radius: 12px;
+    transition: all 0.2s ease;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .dj-mob-nav-item svg {
+    width: 22px;
+    height: 22px;
+  }
+
+  .dj-mob-nav-item.active,
+  .dj-mob-nav-item:active {
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.18);
+  }
+}
+
+/* =============================================================
+   HEADER MOBILE: Ukuran teks disesuaikan
+   ============================================================= */
+@media (max-width: 768px) {
+  .admin-header {
+    padding: 8px 12px !important;
+    min-height: 72px;
+  }
+
+  .admin-header-left {
+    gap: 8px;
+  }
+
+  .admin-logo {
+    width: 38px;
+    height: 38px;
+  }
+
+  /* Judul utama "RUMAH SAKIT" */
+  .admin-header-title h1 {
+    font-size: 1rem !important;
+    line-height: 1.2;
+    margin: 0;
+  }
+
+  /* Subjudul "St. Carolus ..." */
+  .admin-header-title p {
+    font-size: 0.65rem !important;
+    line-height: 1.3;
+    margin-top: 2px;
+  }
+
+  /* Jam dan tanggal */
+  .admin-date-box h2 {
+    font-size: 1.1rem !important;
+  }
+
+  .admin-date-box span {
+    font-size: 0.65rem !important;
+  }
+
+  /* Sembunyikan nama user di mobile (biar lebih hemat ruang) */
+  .user-info .hidden-mobile {
+    display: none;
+  }
+
+  /* Ukuran avatar user */
+  .user-info img {
+    width: 30px;
+    height: 30px;
+  }
+}
+
+/* =============================================================
+   MEMASTIKAN KONTEN CHILDREN RAPI
+   ============================================================= */
+@media (max-width: 768px) {
+  /* Semua tabel yang ada di dalam .table-responsive bisa di-scroll horizontal */
+  .table-responsive,
+  .admin-table-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Filter grid menjadi 1 kolom */
+  .filter-grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px;
+  }
+
+  /* Tombol action di page topbar menjadi block penuh */
+  .page-topbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .page-topbar .btn-primary {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* Card dan form element tidak melebihi lebar */
+  .filter-wrapper,
+  .table-card,
+  .mobile-card-list,
+  .dj-mob-card {
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  /* Input, select, button penuh lebar */
+  input, select, button, .form-control, .form-select {
+    max-width: 100%;
+  }
+}
+
+/* =============================================================
+   UTILITY: tampil di desktop atau mobile
+   ============================================================= */
+.dj-desktop { display: block; }
+.dj-mobile  { display: none; }
+
+@media (max-width: 768px) {
+  .dj-desktop { display: none !important; }
+  .dj-mobile  { display: block !important; }
+}
