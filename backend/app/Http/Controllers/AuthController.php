@@ -2,10 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Paramedic;
 use App\Models\Users;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Firebase\JWT\JWT;
@@ -49,23 +49,45 @@ class AuthController extends Controller
     }
 
     /**
+     * Helper penentu tujuan dashboard & profil dokter berdasarkan role user.
+     */
+    private function resolveAuthPayload(Users $user): array
+    {
+        $roleNames = $user->roles->pluck('role_name')->toArray();
+
+        $isDokterOnly = in_array('Dokter', $roleNames)
+            && !array_intersect(['Super Admin', 'Admin', 'Power User', 'Editor'], $roleNames);
+
+        $redirectTo = $isDokterOnly ? '/dokter' : '/admin';
+
+        $dokterProfile = null;
+        if (in_array('Dokter', $roleNames)) {
+            $dokterProfile = Paramedic::where('is_deleted', 0)
+                ->where(function ($q) use ($user) {
+                    $q->where('user_id', $user->id);
+                    if (!empty($user->npk)) {
+                        $q->orWhere('npk', $user->npk);
+                    }
+                })
+                ->first();
+        }
+
+        return [
+            'roleNames'     => $roleNames,
+            'redirectTo'    => $redirectTo,
+            'dokterProfile' => $dokterProfile,
+        ];
+    }
+
+    /**
      * Login dengan username & password.
      */
     public function login(Request $request)
     {
-        $rules = [
+        $request->validate([
             'username' => 'required|string',
-            'password' => 'required',
-        ];
-
-        $validator = Validator::make($request->all(), $rules);
-        if ($validator->fails()) {
-            return response()->json([
-                'status'  => false,
-                'message' => 'Proses Login Gagal',
-                'data'    => $validator->errors(),
-            ], 401);
-        }
+            'password' => 'required|string',
+        ]);
 
         $user = Users::with(['roles', 'permissions'])
             ->where('username', $request->username)
@@ -73,31 +95,45 @@ class AuthController extends Controller
 
         if (!$user || !Hash::check($request->password, $user->password)) {
             return response()->json([
-                'message' => 'Username dan Password yang dimasukkan tidak sesuai',
+                'status'  => false,
+                'message' => 'Username atau password salah',
             ], 401);
         }
 
-        // Variable $role sempat diisi tapi tidak terpakai di response, tetap dipertahankan agar tidak merusak logika asli
-        if (empty($role = $user->roles)) {
-            $role = ["Users"];
+        if ($user->status !== 'active') {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Akun Anda tidak aktif. Hubungi administrator.',
+            ], 403);
         }
 
-        $perms = $user->getAllPermissions()->pluck('permission_name');
-        Log::info('User permissions:', $perms->toArray());
+        $authMeta  = $this->resolveAuthPayload($user);
+        $roleNames = $authMeta['roleNames'];
+
+        // Cegah akun Pasien masuk lewat form Login Admin/Dokter
+        if (in_array('Pasien', $roleNames) && count($roleNames) === 1) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Akun pasien silakan login melalui Portal Pasien di halaman utama.',
+            ], 403);
+        }
+
+        $token = $user->createToken('api-user')->plainTextToken;
 
         return response()->json([
-            'status'  => true,
-            'message' => 'Berhasil Prosess Login',
-            'token'   => $user->createToken('api-user')->plainTextToken,
-            'user'    => [
+            'status'      => true,
+            'message'     => 'Login berhasil',
+            'token'       => $token,
+            'redirect_to' => $authMeta['redirectTo'],
+            'user'        => [
                 'id'          => $user->id,
+                'npk'         => $user->npk,
                 'name'        => $user->name,
                 'username'    => $user->username,
-                'roles'       => collect($user->roles)->pluck('role_name'),
-                'permissions' => $user->getAllPermissions()
-                    ->pluck('permission_name')
-                    ->filter()
-                    ->values(),
+                'status'      => $user->status,
+                'roles'       => $roleNames,
+                'permissions' => $user->getAllPermissions(),
+                'dokter'      => $authMeta['dokterProfile'],
             ],
         ]);
     }
@@ -149,18 +185,38 @@ class AuthController extends Controller
                 ], 401);
             }
 
+            if ($user->status !== 'active') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Akun Anda tidak aktif. Hubungi administrator.',
+                ], 403);
+            }
+
+            $authMeta  = $this->resolveAuthPayload($user);
+            $roleNames = $authMeta['roleNames'];
+
+            if (in_array('Pasien', $roleNames) && count($roleNames) === 1) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Akun pasien silakan login melalui Portal Pasien di halaman utama.',
+                ], 403);
+            }
+
             $token = $user->createToken('carolus-connect')->plainTextToken;
 
             return response()->json([
-                'success' => true,
-                'message' => 'Login via token berhasil',
-                'token'   => $token,
-                'user'    => [
+                'success'     => true,
+                'message'     => 'Login via token berhasil',
+                'token'       => $token,
+                'redirect_to' => $authMeta['redirectTo'],
+                'user'        => [
                     'id'          => $user->id,
+                    'npk'         => $user->npk,
                     'name'        => $user->name,
                     'username'    => $user->username,
-                    'roles'       => $user->roles->pluck('role_name'),
+                    'roles'       => $roleNames,
                     'permissions' => $user->getAllPermissions()->pluck('permission_name')->values(),
+                    'dokter'      => $authMeta['dokterProfile'],
                 ],
             ]);
         } catch (ExpiredException $e) {

@@ -40,6 +40,11 @@ class PosisiController extends Controller
             ->select(
                 'posisi.id_posisi as id',
                 'posisi.nama_posisi',
+                'posisi.kode_poli',
+                'posisi.jam_operasional',
+                'posisi.lokasi_ruangan',
+                'posisi.kuota_harian',
+                'posisi.status_poli',
                 'posisi.kategori_id',
                 'posisi.urutan',
                 'posisi.is_deleted',
@@ -128,6 +133,11 @@ class PosisiController extends Controller
 
             $id = DB::table('posisi')->insertGetId([
                 'nama_posisi' => $request->nama_posisi,
+                'posisi.kode_poli'=> $request->kode_poli,
+                'posisi.jam_operasional'=> $request->jam_operasional,
+                'posisi.lokasi_ruangan'=> $request->lokasi_ruangan,
+                'posisi.kuota_harian'=> $request->kuota_harian,
+                'posisi.status_poli'=> $request->status_poli,
                 'kategori_id'    => $request->kategori_id,
                 'urutan'         => $urutanBaru,
                 'is_deleted'     => 0,
@@ -301,6 +311,11 @@ class PosisiController extends Controller
         $request->validate([
             'nama_posisi' => 'required|string',
             'kategori_id'    => 'nullable|integer',
+            'posisi.kode_poli'=> 'nullable|string',
+            'posisi.jam_operasional'=> 'nullable|string',
+            'posisi.lokasi_ruangan'=> 'nullable|string',
+            'posisi.kuota_harian'=> 'nullable|string',
+            'posisi.status_poli'=> 'nullable|string',
         ]);
 
         DB::beginTransaction();

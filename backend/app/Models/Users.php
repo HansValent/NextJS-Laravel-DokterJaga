@@ -56,6 +56,12 @@ class Users extends Authenticatable
 
     public function hasRole($role)
     {
+        if (is_array($role)) {
+            return $this->roles()
+                ->whereIn('role_name', $role)
+                ->exists();
+        }
+
         return $this->roles()
             ->where('role_name', $role)
             ->exists();
@@ -67,17 +73,17 @@ class Users extends Authenticatable
             "user_permissions_{$this->id}",
             3600,
             function () {
-    
+
                 $rolePermissions = $this->roles()
                     ->with('permissions')
                     ->get()
                     ->pluck('permissions')
                     ->flatten()
                     ->pluck('permission_name');
-    
+
                 $userPermissions = $this->permissions()
                     ->pluck('permission_name');
-    
+
                 return $rolePermissions
                     ->merge($userPermissions)
                     ->unique()
@@ -85,7 +91,7 @@ class Users extends Authenticatable
                     ->toArray();
             }
         );
-    
+
         return in_array($permission, $permissions);
     }
 
@@ -121,4 +127,21 @@ class Users extends Authenticatable
             return collect(); // return empty collection
         }
     }
+
+    public function paramedic()
+{
+    return $this->hasOne(Paramedic::class, 'user_id', 'id')
+        ->orWhere(function ($q) {
+            if (!empty($this->npk)) {
+                $q->where('npk', $this->npk);
+            }
+        });
+}
+
+    public function pasien()
+    {
+        return $this->hasOne(Pasien::class, 'user_id', 'id');
+    }
+
+
 }

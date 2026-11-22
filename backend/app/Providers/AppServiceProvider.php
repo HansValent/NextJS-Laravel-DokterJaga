@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Support\Facades\Config;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -19,44 +20,66 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        // Pastikan dijalankan hanya saat diakses via HTTP request (bukan via terminal/console)
-        if (!app()->runningInConsole()) {
-            
-            // -----------------------------------------------------------------
-            // 1. OTOMATISASI APP_URL (Berdasarkan IP/Host Backend yang diakses)
-            // -----------------------------------------------------------------
-            if (isset($_SERVER['HTTP_HOST'])) {
-                $protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http';
-                
-                // Mengganti APP_URL di .env secara otomatis di memori saat aplikasi berjalan
-                config(['app.url' => "{$protocol}://{$_SERVER['HTTP_HOST']}"]);
-            }
+        // 1. Sesuaikan app.url secara dinamis saat diakses via HTTP
+        if (!$this->app->runningInConsole() && request()->getHttpHost()) {
+            $scheme = request()->getScheme();
+            $host   = request()->getHttpHost();
+            Config::set('app.url', "{$scheme}://{$host}");
+        }
 
-            // -----------------------------------------------------------------
-            // 2. OTOMATISASI SANCTUM STATEFUL DOMAINS (Berdasarkan Origin Frontend)
-            // -----------------------------------------------------------------
-            // Membaca alamat asal (Origin atau Referer) dari Frontend Next.js yang mengirim request
-            $origin = request()->headers->get('origin') ?? request()->headers->get('referer');
-            
-            if ($origin) {
-                // Hapus "http://" atau "https://"
-                $cleanDomain = preg_replace('#^https?://#', '', rtrim($origin, '/'));
-                
-                // Pengaman: Jika berupa Referer yang membawa path halaman (misal: 172.16.152.121:3005/jadwal),
-                // potong dan ambil domain + port murninya saja (172.16.152.121:3005)
-                $cleanDomain = explode('/', $cleanDomain)[0];
-                
-                // Ambil daftar domain stateful bawaan dari konfigurasi Laravel
-                $statefulDomains = config('sanctum.stateful', []);
-                
-                // Jika IP & Port frontend saat ini belum terdaftar di whitelist, masukkan secara otomatis
-                if (!in_array($cleanDomain, $statefulDomains)) {
-                    $statefulDomains[] = $cleanDomain;
-                    
-                    // Suntikkan kembali ke dalam konfigurasi Sanctum di dalam memori runtime
-                    config(['sanctum.stateful' => $statefulDomains]);
-                }
+        // 2. Ambil Origin / Referer dari Frontend Next.js (mis. http://localhost:3005)
+        $origin  = request()->headers->get('Origin');
+        $referer = request()->headers->get('Referer');
+        $frontendOrigin = null;
+
+        if ($origin) {
+            $frontendOrigin = rtrim($origin, '/');
+        } elseif ($referer) {
+            $parsed = parse_url($referer);
+            if (!empty($parsed['scheme']) && !empty($parsed['host'])) {
+                $port = isset($parsed['port']) ? ':' . $parsed['port'] : '';
+                $frontendOrigin = "{$parsed['scheme']}://{$parsed['host']}{$port}";
             }
         }
+
+        // 3. Tambahkan host+port frontend ke sanctum.stateful secara dinamis
+        $stateful = Config::get('sanctum.stateful', []);
+        if (is_string($stateful)) {
+            $stateful = array_filter(array_map('trim', explode(',', $stateful)));
+        }
+
+        if ($frontendOrigin) {
+            $hostWithPort = preg_replace('#^https?://#', '', $frontendOrigin);
+            if ($hostWithPort && !in_array($hostWithPort, $stateful, true)) {
+                $stateful[] = $hostWithPort;
+                Config::set('sanctum.stateful', $stateful);
+            }
+        }
+
+        // 4. Konfigurasi CORS dinamis agar localhost:3000 - localhost:3010 tidak terblokir preflight
+        $allowedOrigins = Config::get('cors.allowed_origins', []);
+        $defaultDevOrigins = [
+            'http://localhost:3000',
+            'http://localhost:3001',
+            'http://localhost:3005',
+            'http://127.0.0.1:3000',
+            'http://127.0.0.1:3005',
+        ];
+
+        $mergedOrigins = array_values(array_unique(array_merge(
+            is_array($allowedOrigins) ? $allowedOrigins : [],
+            $defaultDevOrigins,
+            $frontendOrigin ? [$frontendOrigin] : []
+        )));
+
+        Config::set('cors.paths', ['api/*', 'sanctum/csrf-cookie']);
+        Config::set('cors.allowed_origins', $mergedOrigins);
+        Config::set('cors.allowed_origins_patterns', [
+            '#^http://localhost(:\d+)?$#',
+            '#^http://127\.0\.0\.1(:\d+)?$#',
+        ]);
+        Config::set('cors.allowed_methods', ['*']);
+        Config::set('cors.allowed_headers', ['*']);
+        Config::set('cors.supports_credentials', true);
     }
 }

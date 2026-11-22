@@ -4,30 +4,29 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 /* ================= CONTROLLERS ================= */
+use App\Http\Controllers\AdminLaporanController;
 use App\Http\Controllers\AuthController;
-use App\Http\Controllers\UsersController;
-use App\Http\Controllers\RoleController;
-use App\Http\Controllers\PermissionController;
-use App\Http\Controllers\RolePermissionController;
-use App\Http\Controllers\UserRoleController;
-use App\Http\Controllers\UserPermissionController;
-use App\Http\Controllers\ParamedicController;
-use App\Http\Controllers\PosisiController;
 use App\Http\Controllers\BagianParamedicController;
+use App\Http\Controllers\DokterDashboardController;
 use App\Http\Controllers\ExportController;
-use App\Http\Controllers\PenanggungJawabController;
+use App\Http\Controllers\ImportController;
+use App\Http\Controllers\ImportTemplateController;
 use App\Http\Controllers\JadwalController;
 use App\Http\Controllers\KategoriPosisiController;
 use App\Http\Controllers\MenuController;
-
-use App\Http\Controllers\ImportController;
-use App\Http\Controllers\ImportTemplateController;
-use App\Http\Controllers\KategoriPosisiController as ControllersKategoriPosisiController;
-use App\Http\Controllers\KategoriSpesialisController;
-
+use App\Http\Controllers\ParamedicController;
+use App\Http\Controllers\PasienAuthController;
+use App\Http\Controllers\PasienPortalController;
+use App\Http\Controllers\PenanggungJawabController;
+use App\Http\Controllers\PermissionController;
+use App\Http\Controllers\PosisiController;
+use App\Http\Controllers\RoleController;
+use App\Http\Controllers\RolePermissionController;
+use App\Http\Controllers\UserPermissionController;
+use App\Http\Controllers\UserRoleController;
+use App\Http\Controllers\UsersController;
 
 Route::get('/jadwal/mod', [JadwalController::class, 'modData']);
-
 
 /*
 |--------------------------------------------------------------------------
@@ -37,6 +36,8 @@ Route::get('/jadwal/mod', [JadwalController::class, 'modData']);
 Route::post('register', [AuthController::class, 'register']);
 Route::post('login', [AuthController::class, 'login']);
 Route::post('login/with-token', [AuthController::class, 'loginWithToken']);
+Route::post('/pasien/register', [PasienAuthController::class, 'register']);
+Route::post('/pasien/login', [PasienAuthController::class, 'login']);
 
 /*
 |--------------------------------------------------------------------------
@@ -69,7 +70,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('import-templates', ImportTemplateController::class)
         ->only(['index', 'store', 'destroy']);
 
-    // ------------------------- EXPORT -------------------------    
+    // ------------------------- EXPORT -------------------------
     Route::prefix('export')->controller(ExportController::class)->group(function () {
         Route::get('template-jadwal', 'exportTemplateJadwal');
         Route::get('template-paramedic', 'exportDataParamedic');
@@ -82,6 +83,37 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('{id}', 'show')->middleware('permission:user.read');
         Route::put('{id}', 'update')->middleware('permission:user.update');
         Route::delete('{id}', 'destroy')->middleware('permission:user.delete');
+    });
+
+    // 1. PORTAL PASIEN (Disesuaikan dengan permission pasien.portal.access)
+    Route::prefix('pasien')->middleware('permission:pasien.portal.access')->group(function () {
+        Route::get('/profil', [PasienPortalController::class, 'dataPasien']);
+        Route::put('/profil', [PasienPortalController::class, 'updateDataPasien']);
+        Route::get('/jadwal-dokter', [PasienPortalController::class, 'rencanaJadwalDokter']);
+        Route::post('/daftar-konsultasi', [PasienPortalController::class, 'daftarKonsultasi']);
+        Route::get('/riwayat-pendaftaran', [PasienPortalController::class, 'riwayatPendaftaran']);
+        Route::get('/pendaftaran/{id}/cetak-antrian', [PasienPortalController::class, 'cetakNomorAntrian']);
+    });
+
+    // 2. DASHBOARD DOKTER (Terpisah dengan Admin)
+    Route::prefix('dokter')->middleware('permission:dokter.dashboard')->group(function () {
+        Route::get('/dashboard', [DokterDashboardController::class, 'dashboard']);
+        Route::get('/jadwal-saya', [DokterDashboardController::class, 'jadwalSaya']);
+        Route::post('/absensi-praktik', [DokterDashboardController::class, 'absensiPraktik']);
+        Route::get('/pendaftaran-pasien', [DokterDashboardController::class, 'daftarPasien']);
+        Route::post('/pendaftaran-pasien/{id}/panggil', [DokterDashboardController::class, 'panggilAntrian']);
+        Route::post('/pendaftaran-pasien/{id}/konsultasi', [DokterDashboardController::class, 'simpanKonsultasi']);
+        Route::get('/laporan', [DokterDashboardController::class, 'laporanSaya']);
+        Route::get('/profil', [DokterDashboardController::class, 'profilDokter']);
+        Route::put('/profil', [DokterDashboardController::class, 'updateProfilDokter']);
+        Route::get('/poliklinik', [DokterDashboardController::class, 'infoPoliklinik']);
+    });
+
+    // 3. LAPORAN TAMBAHAN ADMIN
+    Route::prefix('admin/laporan')->middleware('permission:laporan.admin.read')->group(function () {
+        Route::get('/pendaftaran-pasien', [AdminLaporanController::class, 'laporanPendaftaranPasien']);
+        Route::get('/praktik-dokter', [AdminLaporanController::class, 'laporanPraktikDokter']);
+        Route::get('/konsultasi-medis', [AdminLaporanController::class, 'laporanKonsultasiMedis']);
     });
 
     // ------------------------- ROLES -------------------------
@@ -124,6 +156,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // ------------------------- PARAMEDIC -------------------------
     Route::prefix('paramedic')->controller(ParamedicController::class)->group(function () {
         Route::get('/', 'index')->middleware('permission:paramedic.read');
+        Route::get('/paramedic-deleted', 'showDeleted')->middleware('permission:paramedic.read');
         Route::post('/', 'store')->middleware('permission:paramedic.create');
         Route::put('{id}', 'update')->middleware('permission:paramedic.update');
         Route::delete('{id}', 'destroy')->middleware('permission:paramedic.delete');
@@ -131,9 +164,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('/{id}/permanent', 'permanentDelete')->middleware('permission:paramedic.destroy');
     });
 
-    // ------------------------- posisi -------------------------
+    // ------------------------- POSISI -------------------------
     Route::prefix('posisi')->controller(PosisiController::class)->group(function () {
         Route::get('/', 'index')->middleware('permission:posisi.read');
+        Route::get('/posisi-deleted', 'showDeleted')->middleware('permission:posisi.read');
         Route::post('/', 'store')->middleware('permission:posisi.create');
         Route::put('{id}', 'update')->middleware('permission:posisi.update');
         Route::delete('{id}', 'destroy')->middleware('permission:posisi.delete');
@@ -142,9 +176,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('/{id}/permanent', 'permanentDelete')->middleware('permission:posisi.destroy');
     });
 
-    // ------------------------- KATEGORI posisi -------------------------
+    // ------------------------- KATEGORI POSISI -------------------------
     Route::prefix('kategori-posisi')
-        ->controller(ControllersKategoriPosisiController::class)
+        ->controller(KategoriPosisiController::class)
         ->middleware('permission:kategori_posisi.manage')
         ->group(function () {
             Route::get('/', 'index');
@@ -167,6 +201,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // ------------------------- PENANGGUNG JAWAB -------------------------
     Route::prefix('penanggung_jawab')->controller(PenanggungJawabController::class)->group(function () {
         Route::get('/', 'index')->middleware('permission:penanggung_jawab.read');
+        Route::get('/pj-deleted', 'showDeleted')->middleware('permission:penanggung_jawab.read');
         Route::get('{id}', 'show')->middleware('permission:penanggung_jawab.read');
         Route::post('/', 'store')->middleware('permission:penanggung_jawab.create');
         Route::put('{id}', 'update')->middleware('permission:penanggung_jawab.update');
@@ -178,7 +213,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // ------------------------- JADWAL -------------------------
     Route::prefix('jadwal')->controller(JadwalController::class)->group(function () {
         Route::get('/', 'index')->middleware('permission:jadwal.read');
-        Route::get('/jadwal-deleted','showDeleted')->middleware('permission:jadwal.read');
+        Route::get('/jadwal-deleted', 'showDeleted')->middleware('permission:jadwal.read');
         Route::get('{id}', 'show')->middleware('permission:jadwal.read');
         Route::post('/', 'store')->middleware('permission:jadwal.create');
         Route::put('{id}', 'update')->middleware('permission:jadwal.update');
@@ -199,6 +234,12 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // ------------------------- MENU (USER SIDEBAR) -------------------------
     Route::get('/me/menus', [MenuController::class, 'userMenu']);
+
+    // ------------------------- DELETED DATA (COMPATIBILITY ALIASES) -------------------------
+    Route::get('/posisi-deleted', [PosisiController::class, 'showDeleted'])->middleware('permission:posisi.read');
+    Route::get('/paramedic-deleted', [ParamedicController::class, 'showDeleted'])->middleware('permission:paramedic.read');
+    Route::get('/jadwal-deleted', [JadwalController::class, 'showDeleted'])->middleware('permission:jadwal.read');
+    Route::get('/pj-deleted', [PenanggungJawabController::class, 'showDeleted'])->middleware('permission:penanggung_jawab.read');
 });
 
 /*
@@ -212,14 +253,3 @@ Route::get('posisiDisplay', [PosisiController::class, 'index']);
 Route::get('bagian-paramedicDisplay', [BagianParamedicController::class, 'view']);
 Route::get('penanggung-jawabDisplay', [PenanggungJawabController::class, 'index']);
 Route::get('penanggung-jawabCalendar', [PenanggungJawabController::class, 'calendar']);
-
-
-/*
-|--------------------------------------------------------------------------
-| DEBUG / DELETED DATA
-|--------------------------------------------------------------------------
-*/
-Route::get('/posisi-deleted', [PosisiController::class, 'showDeleted']);
-Route::get('/paramedic-deleted', [ParamedicController::class, 'showDeleted']);
-Route::get('/jadwal-deleted', [JadwalController::class, 'showDeleted']);
-Route::get('/pj-deleted', [PenanggungJawabController::class, 'showDeleted']);
