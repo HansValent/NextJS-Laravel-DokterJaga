@@ -1,131 +1,121 @@
-export const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 
-  (typeof window !== "undefined" 
-    ? `${window.location.protocol}//${window.location.hostname}:8000` 
+// services/api.ts
+export const BASE_URL =
+  process.env.NEXT_PUBLIC_API_URL ||
+  (typeof window !== "undefined"
+    ? `${window.location.protocol}//${window.location.hostname}:8000`
     : "http://localhost:8000");
 
-type HTTPMethod = "GET" | "POST" | "PUT" | "DELETE"
+type HTTPMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
 type FetchOptions = {
-  method?: HTTPMethod
-  body?: unknown
-}
+  method?: HTTPMethod;
+  body?: unknown;
+  headers?: Record<string, string>;
+  requireAuth?: boolean;
+  skipAuth?: boolean;
+};
+
+const PUBLIC_ENDPOINT_PATTERNS = [
+  "Display",
+  "/api/login",
+  "/api/register",
+  "/api/pasien/login",
+  "/api/pasien/register",
+  "/api/jadwal/mod",
+  "/api/public",
+];
 
 // ======================
 // 🚀 FETCH CORE + DEBUG
 // ======================
 
-export async function fetchAPI<T>(
+function getCookieValue(name: string): string | null {
+  if (typeof document === "undefined") return null;
+  const match = document.cookie.match(new RegExp(`(^| )${name}=([^;]+)`));
+  return match ? decodeURIComponent(match[2]) : null;
+}
+
+export async function fetchAPI<T = unknown>(
   endpoint: string,
   options: FetchOptions = {}
 ): Promise<T> {
-  if (typeof window === "undefined") {
-    throw new Error("Client only")
+  const { body, headers, skipAuth = false, method = "GET", ...rest } = options;
+
+  const normalizedEndpoint = endpoint.startsWith("http")
+    ? endpoint
+    : `${BASE_URL}${endpoint.startsWith("/") ? endpoint : `/${endpoint}`}`;
+
+  const token =
+    !skipAuth && typeof window !== "undefined"
+      ? localStorage.getItem("token") || getCookieValue("token")
+      : null;
+
+  const isFormData =
+    typeof FormData !== "undefined" && body instanceof FormData;
+
+  const requestHeaders: Record<string, string> = {
+    Accept: "application/json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...((headers as Record<string, string>) || {}),
+  };
+
+  // Hanya kirim Content-Type JSON jika ada payload dan bukan FormData
+  // Menghindari preflight CORS yang tidak perlu pada request GET
+  if (body !== undefined && body !== null && !isFormData) {
+    requestHeaders["Content-Type"] = "application/json";
   }
 
-  const { method = "GET", body } = options
-  const token = localStorage.getItem("token")
-
-  const isAuthEndpoint =
-    endpoint.startsWith("/api") && !endpoint.includes("Display")
-
-  if (!token && isAuthEndpoint) {
-    window.location.replace("/login")
-    throw new Error("Unauthorized: No token")
-  }
-
-  let res: Response
-
+  let res: Response;
   try {
-    res = await fetch(`${BASE_URL}${endpoint}`, {
+    res = await fetch(normalizedEndpoint, {
       method,
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        ...(token && { Authorization: `Bearer ${token}` }),
-      },
-      body: body ? JSON.stringify(body) : undefined,
-    })
-  } catch (error) {
-    console.error("❌ Network error:", error)
-    throw new Error("Network error: tidak dapat terhubung ke server")
+      headers: requestHeaders,
+      body:
+        body === undefined || body === null
+          ? undefined
+          : isFormData
+          ? (body as FormData)
+          : typeof body === "string"
+          ? body
+          : JSON.stringify(body),
+      ...rest,
+    });
+  } catch (err) {
+    console.error("❌ Network error:", err);
+    throw new Error("Network error: tidak dapat terhubung ke server");
   }
 
-  // 🔥 FIX UTAMA: HANDLE EMPTY RESPONSE
-  let text = ""
-  try {
-    text = await res.text()
-  } catch {
-    text = ""
-  }
-
-  let data: any = null
-  try {
-    data = text ? JSON.parse(text) : null
-  } catch {
-    data = null
-  }
-
-  console.log("🟢 API:", {
-    endpoint,
-    status: res.status,
-    data,
-  })
-
-  // 🔐 HANDLE 401
-  if (res.status === 401 && isAuthEndpoint) {
-      localStorage.removeItem("token")
-      localStorage.removeItem("user")
-      document.cookie = "user=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT"
-      
-      const isIdle = data?.message === "Sesi Anda telah berakhir karena tidak ada aktivitas."
-      if (isIdle) {
-        window.location.replace("/login?message=idle")
-      } else {
-        window.location.replace("/login")
-      }
-    
-      throw new Error(data?.message || "Unauthorized")
+  const text = await res.text();
+  let json: Record<string, unknown> | null = null;
+  if (text) {
+    try {
+      json = JSON.parse(text) as Record<string, unknown>;
+    } catch {
+      json = null;
     }
+  }
 
-  // ❌ HANDLE ERROR
+  if (res.status === 401 && !skipAuth && typeof window !== "undefined") {
+    const isIdle =
+      typeof json?.message === "string" &&
+      json.message.toLowerCase().includes("idle");
+
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    document.cookie = "token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+    document.cookie = "auth_token=; path=/; max-age=0; SameSite=Lax";
+
+    if (!window.location.pathname.startsWith("/login")) {
+      window.location.replace(isIdle ? "/login?message=idle" : "/login");
+    }
+  }
+
   if (!res.ok) {
-    let message = "Terjadi kesalahan"
-
-    if (data?.message) {
-      // Jika message adalah string biasa
-      if (typeof data.message === 'string') {
-        message = data.message
-      }
-      // Jika message adalah objek (contoh: hasil validasi Laravel)
-      else if (typeof data.message === 'object') {
-        const firstKey = Object.keys(data.message)[0]
-        const firstError = data.message[firstKey]
-        if (Array.isArray(firstError) && firstError.length > 0) {
-          message = firstError[0]          // ambil error pertama
-        } else if (typeof firstError === 'string') {
-          message = firstError
-        }
-      }
-    }
-
-    // Fallback kedua: cek field 'errors' (kadang digunakan)
-    if (message === "Terjadi kesalahan" && data?.errors) {
-      const firstError = Object.values(data.errors)[0]
-      if (Array.isArray(firstError) && firstError.length > 0) {
-        message = firstError[0]
-      } else if (typeof firstError === 'string') {
-        message = firstError
-      }
-    }
-
-    console.error("❌ API ERROR DETAIL:", {
-      endpoint,
-      status: res.status,
-      data,
-    })
-
-    throw new Error(message)
+    const errorMsg =
+      (typeof json?.message === "string" && json.message) ||
+      `HTTP Error ${res.status}`;
+    throw new Error(errorMsg);
   }
 
-  return data as T
+  return (json ?? ({} as T)) as T;
 }
