@@ -1,26 +1,67 @@
-import { NextResponse } from "next/server"
-import type { NextRequest } from "next/server"
+// middleware.ts
+import { NextRequest, NextResponse } from 'next/server';
 
-export function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl
+const ADMIN_ROLES = ['super admin', 'admin', 'editor', 'power user', 'igd', 'icu', 'users'];
 
-  const user = request.cookies.get("user")?.value
+export function middleware(req: NextRequest) {
+  const { pathname } = req.nextUrl;
+  const token = req.cookies.get('auth_token')?.value;
+  const rawRoles = req.cookies.get('user_roles')?.value;
 
-  // 🔐 proteksi admin saja
-  if (pathname.startsWith("/admin")) {
-    if (!user) {
-      return NextResponse.redirect(new URL("/login", request.url))
+  let roles: string[] = [];
+  if (rawRoles) {
+    try {
+      roles = JSON.parse(decodeURIComponent(rawRoles)).map((r: string) =>
+        r.trim().toLowerCase()
+      );
+    } catch {
+      roles = [];
     }
   }
 
-  // 🔁 kalau sudah login, jangan ke login lagi
-  if (pathname === "/login" && user) {
-    return NextResponse.redirect(new URL("/admin", request.url))
+  const isAdmin = roles.some((r) => ADMIN_ROLES.includes(r));
+  const isDokter = roles.includes('dokter');
+  const isPasien = roles.includes('pasien');
+
+  // 1. Proteksi Dashboard Admin (/admin/*)
+  if (pathname.startsWith('/admin')) {
+    if (!token) {
+      return NextResponse.redirect(new URL('/login?message=unauthorized', req.url));
+    }
+    if (!isAdmin) {
+      if (isDokter) return NextResponse.redirect(new URL('/dokter/dashboard', req.url));
+      if (isPasien) return NextResponse.redirect(new URL('/pasien', req.url));
+      return NextResponse.redirect(new URL('/login?message=unauthorized', req.url));
+    }
   }
 
-  return NextResponse.next()
+  // 2. Proteksi Dashboard Dokter (/dokter/*)
+  if (pathname.startsWith('/dokter/dashboard')) {
+    if (!token) {
+      return NextResponse.redirect(new URL('/login?message=unauthorized', req.url));
+    }
+    if (!isDokter && !isAdmin) {
+      if (isPasien) return NextResponse.redirect(new URL('/pasien', req.url));
+      return NextResponse.redirect(new URL('/login?message=unauthorized', req.url));
+    }
+  }
+
+  // 3. Proteksi Portal Pasien (/pasien/*)
+  if (pathname.startsWith('/pasien')) {
+    if (!token || !isPasien) {
+      return NextResponse.redirect(new URL('/home', req.url));
+    }
+  }
+
+  // 4. Jika user sudah login dan membuka /login, arahkan sesuai role
+  if (pathname === '/login' && token) {
+    if (isAdmin) return NextResponse.redirect(new URL('/admin', req.url));
+    if (isDokter) return NextResponse.redirect(new URL('/dokter/dashboard', req.url));
+  }
+
+  return NextResponse.next();
 }
 
 export const config = {
-  matcher: ["/admin/:path*", "/login"],
-}
+  matcher: ['/admin/:path*', '/dokter/dashboard/:path*', '/pasien/:path*', '/login'],
+};
